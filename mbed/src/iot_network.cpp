@@ -198,9 +198,9 @@ static size_t network_recv(IotNetworkConnection_t pConnection,
     assert(bytesRequested < INT32_MAX);
 
     pConnection->mtx.lock();
-    pConnection->socket.set_blocking(false);
-    auto res = pConnection->socket.recv(pBuffer, bytesRequested);
     pConnection->socket.set_blocking(true);
+    auto res = pConnection->socket.recv(pBuffer, bytesRequested);
+    pConnection->socket.set_blocking(false);
     pConnection->mtx.unlock();
 
     if (res < 0) {
