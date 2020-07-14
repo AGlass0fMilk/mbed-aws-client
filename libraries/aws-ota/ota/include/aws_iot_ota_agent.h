@@ -36,9 +36,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-/* Includes required by the FreeRTOS timers structure. */
-#include "FreeRTOS.h"
-#include "timers.h"
+/* Include Mbed-OS timer */
+#include "drivers/Timer.h"
 
 /* Evaluates to the length of a constant string defined like 'static const char str[]= "xyz"; */
 #define CONST_STRLEN( s )    ( ( ( uint32_t ) sizeof( s ) ) - 1UL )
