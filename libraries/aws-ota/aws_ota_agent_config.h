@@ -3,6 +3,8 @@
  * @brief OTA user configurable settings.
  */
 
+#include <stdint.h>
+
 #ifndef _AWS_OTA_AGENT_CONFIG_H_
 #define _AWS_OTA_AGENT_CONFIG_H_
 
@@ -46,7 +48,7 @@
 /**
  * @brief The OTA agent task priority. Normally it runs at a low priority.
  */
-#define otaconfigAGENT_PRIORITY                 tskIDLE_PRIORITY + 5U
+#define otaconfigAGENT_PRIORITY                 osPriorityNormal
 
 /**
  * @brief The maximum allowed length of the thing name used by the OTA agent.

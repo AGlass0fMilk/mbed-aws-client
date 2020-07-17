@@ -36,8 +36,10 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-/* Include Mbed-OS timer */
-#include "drivers/Timer.h"
+/* mbed-trace */
+#include "mbed_trace.h"
+
+#define TickType_t uint32_t
 
 /* Evaluates to the length of a constant string defined like 'static const char str[]= "xyz"; */
 #define CONST_STRLEN( s )    ( ( ( uint32_t ) sizeof( s ) ) - 1UL )
@@ -54,7 +56,7 @@ extern const char cOTA_JSON_FileSignatureKey[ OTA_FILE_SIG_KEY_STR_MAX_LENGTH ];
     #define DEFINE_OTA_METHOD_NAME( name )      \
     static const char OTA_METHOD_NAME[] = name; \
     ( void ) OTA_METHOD_NAME;
-    #define OTA_LOG_L1         vLoggingPrintf
+    #define OTA_LOG_L1      tr_error
 #else
     #define DEFINE_OTA_METHOD_NAME( name )
     #define OTA_LOG_L1( ... )
@@ -63,7 +65,7 @@ extern const char cOTA_JSON_FileSignatureKey[ OTA_FILE_SIG_KEY_STR_MAX_LENGTH ];
     #define DEFINE_OTA_METHOD_NAME_L2( name )   \
     static const char OTA_METHOD_NAME[] = name; \
     ( void ) OTA_METHOD_NAME;
-    #define OTA_LOG_L2    vLoggingPrintf
+    #define OTA_LOG_L2      tr_info
 #else
     #define DEFINE_OTA_METHOD_NAME_L2( name )
     #define OTA_LOG_L2( ... )
@@ -72,7 +74,7 @@ extern const char cOTA_JSON_FileSignatureKey[ OTA_FILE_SIG_KEY_STR_MAX_LENGTH ];
     #define DEFINE_OTA_METHOD_NAME_L3( name )   \
     static const char OTA_METHOD_NAME[] = name; \
     ( void ) OTA_METHOD_NAME;
-    #define OTA_LOG_L3    vLoggingPrintf
+    #define OTA_LOG_L3      tr_debug
 #else
     #define DEFINE_OTA_METHOD_NAME_L3( name )
     #define OTA_LOG_L3( ... )

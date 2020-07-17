@@ -34,6 +34,8 @@
 /* OTA inteface includes. */
 #include "aws_iot_ota_interface.h"
 
+#define TRACE_GROUP "ota"
+
 /* OTA transport inteface includes. */
 
 #if ( configENABLED_DATA_PROTOCOLS & OTA_DATA_OVER_MQTT ) || ( configENABLED_CONTROL_PROTOCOL & OTA_CONTROL_OVER_MQTT )

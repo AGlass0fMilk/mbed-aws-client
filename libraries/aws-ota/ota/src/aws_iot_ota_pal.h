@@ -24,6 +24,7 @@
  */
 
 #ifndef _AWS_OTA_PAL_H_
+
 #define _AWS_OTA_PAL_H_
 
 #include "aws_iot_ota_types.h"

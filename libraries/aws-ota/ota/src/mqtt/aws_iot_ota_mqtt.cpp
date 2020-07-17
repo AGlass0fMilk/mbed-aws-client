@@ -31,15 +31,21 @@
 /* Standard includes. */
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* MQTT includes. */
 #include "iot_mqtt.h"
 
 /* OTA includes. */
-#include "aws_iot_ota_agent.h"
 #include "aws_iot_ota_agent_internal.h"
 #include "aws_application_version.h"
 #include "aws_iot_ota_cbor.h"
+
+#define TRACE_GROUP "ota"
+
+#define BaseType_t bool
+#define pdTRUE 1
+#define pdFALSE 0
 
 /* General constants. */
 #define OTA_SUBSCRIBE_WAIT_MS          30000UL
@@ -151,7 +157,7 @@ static bool prvSubscribeToJobNotificationTopics( const OTA_AgentContext_t * pxAg
     IotMqttSubscription_t stJobsSubscription;
     IotMqttError_t eResult = IOT_MQTT_STATUS_PENDING;
     uint16_t usTopicLen = 0;
-    OTA_ConnectionContext_t * pvConnContext = pxAgentCtx->pvConnectionContext;
+    OTA_ConnectionContext_t * pvConnContext = (OTA_ConnectionContext_t *)pxAgentCtx->pvConnectionContext;
 
     /* Build the first topic. */
     usTopicLen = ( uint16_t ) snprintf( pcJobTopic, /*lint -e586 Intentionally using snprintf. */
@@ -170,7 +176,7 @@ static bool prvSubscribeToJobNotificationTopics( const OTA_AgentContext_t * pxAg
     if( ( usTopicLen > 0U ) && ( usTopicLen < sizeof( pcJobTopic ) ) )
     {
         /* Subscribe to the first of two jobs topics. */
-        eResult = IotMqtt_TimedSubscribe( pvConnContext->pvControlClient,
+        eResult = IotMqtt_TimedSubscribe( (IotMqttConnection_t) pvConnContext->pvControlClient,
                                           &stJobsSubscription,
                                           1, /* Subscriptions count */
                                           0, /* flags */
@@ -195,7 +201,7 @@ static bool prvSubscribeToJobNotificationTopics( const OTA_AgentContext_t * pxAg
     {
         /* Subscribe to the second of two jobs topics. */
         stJobsSubscription.topicFilterLength = usTopicLen;
-        eResult = IotMqtt_TimedSubscribe( pvConnContext->pvControlClient,
+        eResult = IotMqtt_TimedSubscribe((IotMqttConnection_t) pvConnContext->pvControlClient,
                                           &stJobsSubscription,
                                           1, /* Subscriptions count */
                                           0, /* flags */
@@ -243,7 +249,7 @@ static bool prvUnSubscribeFromDataStream( const OTA_AgentContext_t * pxAgentCtx 
         {
             xUnSub.pTopicFilter = ( const char * ) pcOTA_RxStreamTopic;
 
-            if( IotMqtt_TimedUnsubscribe( ( ( OTA_ConnectionContext_t * ) pxAgentCtx->pvConnectionContext )->pvControlClient,
+            if( IotMqtt_TimedUnsubscribe( (IotMqttConnection_t) ( ( OTA_ConnectionContext_t * ) pxAgentCtx->pvConnectionContext )->pvControlClient,
                                           &xUnSub,
                                           1, /* Subscriptions count */
                                           0, /* flags */
@@ -277,7 +283,7 @@ static void prvUnSubscribeFromJobNotificationTopic( const OTA_AgentContext_t * p
     IotMqttOperation_t paUnubscribeOperation[ 2 ] = { NULL };
     char pcJobTopic[ OTA_MAX_TOPIC_LEN ];
 
-    OTA_ConnectionContext_t * pvConnContext = pxAgentCtx->pvConnectionContext;
+    OTA_ConnectionContext_t * pvConnContext = (OTA_ConnectionContext_t *)pxAgentCtx->pvConnectionContext;
 
     /* Try to unsubscribe from the first of two job topics. */
     xUnSub.qos = IOT_MQTT_QOS_0;
@@ -289,7 +295,7 @@ static void prvUnSubscribeFromJobNotificationTopic( const OTA_AgentContext_t * p
 
     if( ( xUnSub.topicFilterLength > 0U ) && ( xUnSub.topicFilterLength < sizeof( pcJobTopic ) ) )
     {
-        if( IotMqtt_Unsubscribe( pvConnContext->pvControlClient,
+        if( IotMqtt_Unsubscribe( (IotMqttConnection_t) pvConnContext->pvControlClient,
                                  &xUnSub,
                                  1,                      /* Subscriptions count */
                                  IOT_MQTT_FLAG_WAITABLE, /* flags */
@@ -312,7 +318,7 @@ static void prvUnSubscribeFromJobNotificationTopic( const OTA_AgentContext_t * p
 
     if( ( xUnSub.topicFilterLength > 0U ) && ( xUnSub.topicFilterLength < sizeof( pcJobTopic ) ) )
     {
-        if( IotMqtt_Unsubscribe( pvConnContext->pvControlClient,
+        if( IotMqtt_Unsubscribe( (IotMqttConnection_t) pvConnContext->pvControlClient,
                                  &xUnSub,
                                  1,                      /* Subscriptions count */
                                  IOT_MQTT_FLAG_WAITABLE, /* flags */
@@ -356,7 +362,7 @@ static IotMqttError_t prvPublishMessage( const OTA_AgentContext_t * pxAgentCtx,
 {
     IotMqttError_t eResult;
     IotMqttPublishInfo_t xPublishParams;
-    OTA_ConnectionContext_t * pvConnContext = pxAgentCtx->pvConnectionContext;
+    OTA_ConnectionContext_t * pvConnContext = (OTA_ConnectionContext_t *) pxAgentCtx->pvConnectionContext;
 
     xPublishParams.pTopicName = pacTopic;
     xPublishParams.topicNameLength = usTopicLen;
@@ -367,7 +373,7 @@ static IotMqttError_t prvPublishMessage( const OTA_AgentContext_t * pxAgentCtx,
     xPublishParams.retryMs = OTA_RETRY_DELAY_MS;
     xPublishParams.retain = false;
 
-    eResult = IotMqtt_TimedPublish( pvConnContext->pvControlClient, &xPublishParams, 0, OTA_PUBLISH_WAIT_MS );
+    eResult = IotMqtt_TimedPublish( (IotMqttConnection_t) pvConnContext->pvControlClient, &xPublishParams, 0, OTA_PUBLISH_WAIT_MS );
 
     return eResult;
 }
@@ -773,7 +779,7 @@ OTA_Err_t prvInitFileTransfer_Mqtt( OTA_AgentContext_t * pxAgentCtx )
 
     if( ( xOTAUpdateDataSubscription.topicFilterLength > 0U ) && ( xOTAUpdateDataSubscription.topicFilterLength < sizeof( pcOTA_RxStreamTopic ) ) )
     {
-        if( IotMqtt_TimedSubscribe( ( ( OTA_ConnectionContext_t * ) pxAgentCtx->pvConnectionContext )->pvControlClient,
+        if( IotMqtt_TimedSubscribe( (IotMqttConnection_t) ( ( OTA_ConnectionContext_t * ) pxAgentCtx->pvConnectionContext )->pvControlClient,
                                     &xOTAUpdateDataSubscription,
                                     1, /* Subscriptions count */
                                     0, /* flags */
@@ -925,7 +931,7 @@ OTA_Err_t prvDecodeFileBlock_Mqtt( uint8_t * pucMessageBuffer,
         memcpy( pucMessageBuffer, *ppucPayload, *pxPayloadSize );
 
         /* Free the payload as it is copied in data buffer. */
-        vPortFree( *ppucPayload );
+        free( *ppucPayload );
         *ppucPayload = pucMessageBuffer;
 
         xErr = kOTA_Err_None;

@@ -27,7 +27,6 @@
 #define __AWS_IOT_OTA_INTERFACE__H__
 
 /* OTA includes. */
-#include "aws_iot_ota_agent.h"
 #include "aws_iot_ota_agent_internal.h"
 
 /* General Constants. */

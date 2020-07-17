@@ -29,7 +29,7 @@
 /**
  * @brief Decode a Get Stream response message from AWS IoT OTA.
  */
-BaseType_t OTA_CBOR_Decode_GetStreamResponseMessage( const uint8_t * pucMessageBuffer,
+bool OTA_CBOR_Decode_GetStreamResponseMessage( const uint8_t * pucMessageBuffer,
                                                      size_t xMessageSize,
                                                      int32_t * plFileId,
                                                      int32_t * plBlockId,
@@ -41,7 +41,7 @@ BaseType_t OTA_CBOR_Decode_GetStreamResponseMessage( const uint8_t * pucMessageB
  * @brief Create an encoded Get Stream Request message for the AWS IoT OTA
  * service.
  */
-BaseType_t OTA_CBOR_Encode_GetStreamRequestMessage( uint8_t * pucMessageBuffer,
+bool OTA_CBOR_Encode_GetStreamRequestMessage( uint8_t * pucMessageBuffer,
                                                     size_t xMessageBufferSize,
                                                     size_t * pxEncodedMessageSize,
                                                     const char * pcClientToken,

@@ -33,13 +33,18 @@
 #define _AWS_IOT_OTA_AGENT_INTERNAL_H_
 
 #include "aws_ota_agent_config.h"
+#include "aws_iot_ota_agent.h"
 #include "jsmn.h"
 
 /* FreeRTOS includes. */
-#include "FreeRTOS.h"
-#include "event_groups.h"
-#include "queue.h"
-#include "semphr.h"
+//#include "FreeRTOS.h"
+//#include "event_groups.h"
+//#include "queue.h"
+//#include "semphr.h"
+
+/* Mbed-OS includes. */
+#include "rtos/Queue.h"
+#include "rtos/Mutex.h"
 
 /* General constants. */
 #define LOG2_BITS_PER_BYTE           3UL                                               /* Log base 2 of bits per byte. */
@@ -238,30 +243,6 @@ typedef struct ota_agent_statistics
     uint32_t ulOTA_PacketsDropped;   /* Number of OTA packets dropped due to congestion. */
 } OTA_AgentStatistics_t;
 
-/* The OTA agent is a singleton today. The structure keeps it nice and organized. */
-
-typedef struct ota_agent_context
-{
-    OTA_State_t eState;                                     /* State of the OTA agent. */
-    uint8_t pcThingName[ otaconfigMAX_THINGNAME_LEN + 1U ]; /* Thing name + zero terminator. */
-    void * pvConnectionContext;                             /* Connection context for control and data plane. */
-    OTA_FileContext_t pxOTA_Files[ OTA_MAX_FILES ];         /* Static array of OTA file structures. */
-    uint32_t ulFileIndex;                                   /* Index of current file in the array. */
-    uint32_t ulServerFileID;                                /* Variable to store current file ID passed down */
-    uint8_t * pcOTA_Singleton_ActiveJobName;                /* The currently active job name. We only allow one at a time. */
-    uint8_t * pcClientTokenFromJob;                         /* The clientToken field from the latest update job. */
-    uint32_t ulTimestampFromJob;                            /* Timestamp received from the latest job document. */
-    TimerHandle_t pvSelfTestTimer;                          /* The self-test response expected timer. */
-    TimerHandle_t xRequestTimer;                            /* The request timer associated with this OTA context. */
-    QueueHandle_t xOTA_EventQueue;                          /* Event queue for communicating with the OTA Agent task. */
-    OTA_ImageState_t eImageState;                           /* The current application image state. */
-    OTA_PAL_Callbacks_t xPALCallbacks;                      /* Variable to store PAL callbacks */
-    uint32_t ulNumOfBlocksToReceive;                        /* Number of data blocks to receive per data request. */
-    OTA_AgentStatistics_t xStatistics;                      /* The OTA agent statistics block. */
-    SemaphoreHandle_t xOTA_ThreadSafetyMutex;               /* Mutex used to ensure thread safety while managing data buffers. */
-    uint32_t ulRequestMomentum;                             /* The number of requests sent before a response was received. */
-} OTA_AgentContext_t;
-
 /* The OTA Agent event and data structures. */
 
 typedef struct
@@ -276,6 +257,32 @@ typedef struct
     OTA_EventData_t * pxEventData;
     OTA_Event_t xEventId;
 } OTA_EventMsg_t;
+
+using ota_queue_t = rtos::Queue<OTA_EventMsg_t, OTA_NUM_MSG_Q_ENTRIES>;
+
+/* The OTA agent is a singleton today. The structure keeps it nice and organized. */
+
+typedef struct ota_agent_context
+{
+    OTA_State_t eState;                                     /* State of the OTA agent. */
+    uint8_t pcThingName[ otaconfigMAX_THINGNAME_LEN + 1U ]; /* Thing name + zero terminator. */
+    void * pvConnectionContext;                             /* Connection context for control and data plane. */
+    OTA_FileContext_t pxOTA_Files[ OTA_MAX_FILES ];         /* Static array of OTA file structures. */
+    uint32_t ulFileIndex;                                   /* Index of current file in the array. */
+    uint32_t ulServerFileID;                                /* Variable to store current file ID passed down */
+    uint8_t * pcOTA_Singleton_ActiveJobName;                /* The currently active job name. We only allow one at a time. */
+    uint8_t * pcClientTokenFromJob;                         /* The clientToken field from the latest update job. */
+    uint32_t ulTimestampFromJob;                            /* Timestamp received from the latest job document. */
+    int pvSelfTestTimer;                                    /* The self-test response expected timer handle id. */
+    int xRequestTimer;                                      /* The request timer associated with this OTA context, handle id */
+    ota_queue_t* xOTA_EventQueue;                           /* Event queue for communicating with the OTA Agent task. */
+    OTA_ImageState_t eImageState;                           /* The current application image state. */
+    OTA_PAL_Callbacks_t xPALCallbacks;                      /* Variable to store PAL callbacks */
+    uint32_t ulNumOfBlocksToReceive;                        /* Number of data blocks to receive per data request. */
+    OTA_AgentStatistics_t xStatistics;                      /* The OTA agent statistics block. */
+    rtos::Mutex* xOTA_ThreadSafetyMutex;                    /* Mutex used to ensure thread safety while managing data buffers. */
+    uint32_t ulRequestMomentum;                             /* The number of requests sent before a response was received. */
+} OTA_AgentContext_t;
 
 /*
  * Get buffer available from static pool of OTA buffers.
