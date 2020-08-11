@@ -56,7 +56,7 @@ extern const char cOTA_JSON_FileSignatureKey[ OTA_FILE_SIG_KEY_STR_MAX_LENGTH ];
     #define DEFINE_OTA_METHOD_NAME( name )      \
     static const char OTA_METHOD_NAME[] = name; \
     ( void ) OTA_METHOD_NAME;
-    #define OTA_LOG_L1      tr_error
+    #define OTA_LOG_L1      tr_info
 #else
     #define DEFINE_OTA_METHOD_NAME( name )
     #define OTA_LOG_L1( ... )
@@ -65,7 +65,7 @@ extern const char cOTA_JSON_FileSignatureKey[ OTA_FILE_SIG_KEY_STR_MAX_LENGTH ];
     #define DEFINE_OTA_METHOD_NAME_L2( name )   \
     static const char OTA_METHOD_NAME[] = name; \
     ( void ) OTA_METHOD_NAME;
-    #define OTA_LOG_L2      tr_info
+    #define OTA_LOG_L2      tr_error
 #else
     #define DEFINE_OTA_METHOD_NAME_L2( name )
     #define OTA_LOG_L2( ... )
