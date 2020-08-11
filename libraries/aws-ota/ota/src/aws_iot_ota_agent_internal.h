@@ -43,7 +43,7 @@
 //#include "semphr.h"
 
 /* Mbed-OS includes. */
-#include "rtos/Queue.h"
+#include "rtos/Mail.h"
 #include "rtos/Mutex.h"
 
 /* General constants. */
@@ -258,7 +258,7 @@ typedef struct
     OTA_Event_t xEventId;
 } OTA_EventMsg_t;
 
-using ota_queue_t = rtos::Queue<OTA_EventMsg_t, OTA_NUM_MSG_Q_ENTRIES>;
+using ota_queue_t = rtos::Mail<OTA_EventMsg_t, OTA_NUM_MSG_Q_ENTRIES>;
 
 /* The OTA agent is a singleton today. The structure keeps it nice and organized. */
 

@@ -2776,12 +2776,6 @@ static void prvOTAAgentTask( )
 {
     DEFINE_OTA_METHOD_NAME( "prvOTAAgentTask" );
 
-    OTA_EventMsg_t xEventMsg = { 0 };
-
-    /** If you are confused as to why Mbed's Queue API takes a pointer to a pointer, so am I... */
-    OTA_EventMsg_t* MsgPtr = &xEventMsg;
-
-
     uint32_t ulTransitionTableLen = sizeof( OTATransitionTable ) / sizeof( OTATransitionTable[ 0 ] );
     uint32_t i = 0;
 
@@ -2795,7 +2789,8 @@ static void prvOTAAgentTask( )
         /*
          * Receive the next event form the OTA event queue to process.
          */
-        if( xOTA_Agent.xOTA_EventQueue->try_get_for(rtos::Kernel::wait_for_u32_forever, &MsgPtr) )
+        OTA_EventMsg_t* event_msg = xOTA_Agent.xOTA_EventQueue->try_get_for(rtos::Kernel::wait_for_u32_forever);
+        if( event_msg != nullptr )
         {
             /*
              * Search for the state and event from the table.
@@ -2804,7 +2799,7 @@ static void prvOTAAgentTask( )
             {
                 if( ( ( OTATransitionTable[ i ].xCurrentState == xOTA_Agent.eState ) ||
                       ( OTATransitionTable[ i ].xCurrentState == eOTA_AgentState_All ) ) &&
-                    ( OTATransitionTable[ i ].xEventId == xEventMsg.xEventId ) )
+                    ( OTATransitionTable[ i ].xEventId == event_msg->xEventId ) )
                 {
                     OTA_LOG_L3( "[%s] , State matched [%s],  Event matched  [%s]\n",
                                 OTA_METHOD_NAME,
@@ -2814,7 +2809,7 @@ static void prvOTAAgentTask( )
                     /*
                      * Execute the handler function.
                      */
-                    prvExecuteHandler( i, &xEventMsg );
+                    prvExecuteHandler( i, event_msg );
                     break;
                 }
             }
@@ -2824,8 +2819,11 @@ static void prvOTAAgentTask( )
                 /*
                  * Handle unexpected events.
                  */
-                prvHandleUnexpectedEvents( &xEventMsg );
+                prvHandleUnexpectedEvents( event_msg );
             }
+
+            // Free the mail box slot
+            xOTA_Agent.xOTA_EventQueue->free(event_msg);
         }
     }
 }
@@ -2840,7 +2838,8 @@ static uint32_t prvStartOTAAgentTask( void * pvConnectionContext,
      * The actual OTA Task and queue control structure. Only created once.
      */
 
-    portENTER_CRITICAL();
+    // Cannot call new in critical section!
+    //portENTER_CRITICAL();
 
     /*
      * The current OTA image state as set by the OTA agent.
@@ -2855,7 +2854,7 @@ static uint32_t prvStartOTAAgentTask( void * pvConnectionContext,
     /*
      * Create the queue used to pass event messages to the OTA task.
      */
-    xOTA_Agent.xOTA_EventQueue = new rtos::Queue<OTA_EventMsg_t, OTA_NUM_MSG_Q_ENTRIES>;
+    xOTA_Agent.xOTA_EventQueue = new rtos::Mail<OTA_EventMsg_t, OTA_NUM_MSG_Q_ENTRIES>;
     configASSERT( xOTA_Agent.xOTA_EventQueue != NULL );
 
     /*
@@ -2884,7 +2883,7 @@ static uint32_t prvStartOTAAgentTask( void * pvConnectionContext,
     pxOTA_TaskHandle = new rtos::Thread(otaconfigAGENT_PRIORITY, otaconfigSTACK_SIZE, nullptr, "ota-agent-thread");
     xReturn = pxOTA_TaskHandle->start(mbed::callback(prvOTAAgentTask));
 
-    portEXIT_CRITICAL(); /* Protected elements are initialized. It's now safe to context switch. */
+    //portEXIT_CRITICAL(); /* Protected elements are initialized. It's now safe to context switch. */
 
     /*
      * If task creation succeed, wait for the OTA agent to be ready before proceeding. Otherwise,
@@ -2913,8 +2912,18 @@ bool OTA_SignalEvent( const OTA_EventMsg_t * const pxEventMsg )
      */
     if( xOTA_Agent.xOTA_EventQueue != NULL )
     {
-        xErr = xOTA_Agent.xOTA_EventQueue->try_put_for(rtos::Kernel::wait_for_u32_forever,
-                (OTA_EventMsg_t*) pxEventMsg);
+        // Allocate slot in mail
+        OTA_EventMsg_t* event_slot = xOTA_Agent.xOTA_EventQueue->try_alloc_for(rtos::Kernel::wait_for_u32_forever);
+
+        // If allocation was successful
+        if(event_slot != nullptr) {
+            // Copy the event message and put it in the queue
+            memcpy(event_slot, pxEventMsg, sizeof(OTA_EventMsg_t));
+            xOTA_Agent.xOTA_EventQueue->put(event_slot);
+
+            // If allocation succeeded the Queue is guaranteed to have space
+            xErr = pdTRUE;
+        }
     }
 
     if( xErr == pdTRUE )
