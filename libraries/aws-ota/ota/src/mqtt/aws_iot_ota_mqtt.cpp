@@ -34,7 +34,9 @@
 #include <stdlib.h>
 
 /* MQTT includes. */
+extern "C" {
 #include "iot_mqtt.h"
+}
 
 /* OTA includes. */
 #include "aws_iot_ota_agent_internal.h"
