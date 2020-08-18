@@ -14,6 +14,8 @@
 
 #include "mbed_trace.h"
 
+#include "aws_ota_pal_flash.h"
+
 #define TRACE_GROUP "ota_pal"
 
 /* Specify the OTA signature algorithm we support on this platform. */
@@ -22,7 +24,7 @@ const char cOTA_JSON_FileSignatureKey[ OTA_FILE_SIG_KEY_STR_MAX_LENGTH ] = "sig-
 static inline bool prvContextValidate( OTA_FileContext_t * C )
 {
     return( ( C != NULL ) &&
-            ( C->pucFile != NULL ) ); /*lint !e9034 Comparison is correct for file pointer type. */
+            ( C->lFileHandle != NULL ) ); /*lint !e9034 Comparison is correct for file pointer type. */
 }
 
 /* Used to set the high bit of Windows error codes for a negative return value. */
@@ -40,29 +42,9 @@ OTA_Err_t prvPAL_Abort(OTA_FileContext_t* const C) {
 
     if( NULL != C )
     {
+        eResult = kOTA_Err_None;
         /* Close the OTA update file if it's open. */
-        if( NULL != C->pucFile )
-        {
-            lFileCloseResult = fclose((__sFILE*)C->pucFile ); /*lint !e482 !e586
-                                                      * Context file handle state is managed by this API. */
-            C->pucFile = NULL;
-
-            if( 0 == lFileCloseResult )
-            {
-                OTA_LOG_L1( "[%s] OK\r\n", OTA_METHOD_NAME );
-                eResult = kOTA_Err_None;
-            }
-            else /* Failed to close file. */
-            {
-                OTA_LOG_L1( "[%s] ERROR - Closing file failed.\r\n", OTA_METHOD_NAME );
-                eResult = ( kOTA_Err_FileAbort | ( errno & kOTA_PAL_ErrMask ) );
-            }
-        }
-        else
-        {
-            /* Nothing to do. No open file associated with this context. */
-            eResult = kOTA_Err_None;
-        }
+        // TODO - close file?
     }
     else /* Context was not valid. */
     {
@@ -77,35 +59,59 @@ OTA_Err_t prvPAL_CreateFileForRx(OTA_FileContext_t* const C) {
     DEFINE_OTA_METHOD_NAME( "prvPAL_CreateFileForRx" );
 
     OTA_Err_t eResult = kOTA_Err_Uninitialized; /* For MISRA mandatory. */
+    mbed::BlockDevice* update_bd = NULL;
+    int err = 0;
 
     if( C != NULL )
     {
-        if ( C->pucFilePath != NULL )
-        {
-            C->pucFile = (uint8_t*) fopen( ( const char * )C->pucFilePath, "w+b" ); /*lint !e586
-                                                                           * C standard library call is being used for portability. */
+        eResult = kOTA_Err_None;
 
-            if ( C->pucFile != NULL )
-            {
-                eResult = kOTA_Err_None;
-                OTA_LOG_L1( "[%s] Receive file created.\r\n", OTA_METHOD_NAME );
-            }
-            else
-            {
-                eResult = ( kOTA_Err_RxFileCreateFailed | ( errno & kOTA_PAL_ErrMask ) ); /*lint !e40 !e737 !e9027 !e9029 */
-                OTA_LOG_L1( "[%s] ERROR - Failed to start operation: already active!\r\n", OTA_METHOD_NAME );
-            }
-        }
-        else
-        {
+        // Update flash area already opened and initialized
+        if( C->lFileHandle != NULL ) {
             eResult = kOTA_Err_RxFileCreateFailed;
-            OTA_LOG_L1( "[%s] ERROR - Invalid context provided.\r\n", OTA_METHOD_NAME );
         }
-    }
-    else
-    {
-        eResult = kOTA_Err_RxFileCreateFailed;
-        OTA_LOG_L1( "[%s] ERROR - Invalid context provided.\r\n", OTA_METHOD_NAME );
+
+        if(eResult == kOTA_Err_None) {
+            // Get the flash update partition block device
+            update_bd = aws::ota::get_update_bd();
+            if(update_bd == NULL) {
+                OTA_LOG_L1( "[%s] ERROR - Null update block device pointer!\r\n", OTA_METHOD_NAME );
+                eResult = kOTA_Err_RxFileCreateFailed;
+            }
+        }
+
+
+        if(eResult == kOTA_Err_None) {
+            // Initialize the update block device
+            err = update_bd->init();
+            if(err) {
+                OTA_LOG_L1( "[%s] ERROR - Failed to initialize update block device!\r\n", OTA_METHOD_NAME );
+                eResult = kOTA_Err_RxFileCreateFailed;
+            }
+        }
+
+        if(eResult == kOTA_Err_None) {
+
+            // Erase the update block device
+            err = update_bd->erase(0, update_bd->size());
+
+            if(err) {
+                OTA_LOG_L1( "[%s] ERROR - Failed to erase the update block device!\r\n", OTA_METHOD_NAME );
+                eResult = kOTA_Err_RxFileCreateFailed;
+            }
+        }
+
+        if(eResult == kOTA_Err_None) {
+            // Check that the update partition is big enough to contain the new firmware
+            if(C->ulFileSize > update_bd->size()) {
+                OTA_LOG_L1( "[%s] ERROR - Update size is larger than update block device (%i > %i)\r\n",
+                        OTA_METHOD_NAME, C->ulFileSize, update_bd->size());
+                eResult = kOTA_Err_OutOfMemory;
+            }
+
+            // Save the update_bd pointer and return OK
+            C->lFileHandle = (int32_t)(update_bd);
+        }
     }
 
     return eResult; /*lint !e480 !e481 Exiting function without calling fclose.
@@ -116,7 +122,6 @@ OTA_Err_t prvPAL_CloseFile(OTA_FileContext_t* const C) {
     DEFINE_OTA_METHOD_NAME( "prvPAL_CloseFile" );
 
     OTA_Err_t eResult = kOTA_Err_None;
-    int32_t lWindowsError = 0;
 
     if( prvContextValidate( C ) == true )
     {
@@ -132,21 +137,14 @@ OTA_Err_t prvPAL_CloseFile(OTA_FileContext_t* const C) {
             eResult = kOTA_Err_SignatureCheckFailed;
         }
 
-        /* Close the file. */
-        lWindowsError = fclose((__sFILE*) C->pucFile ); /*lint !e482 !e586
-                                               * C standard library call is being used for portability. */
-        C->pucFile = NULL;
-
-        if( lWindowsError != 0 )
-        {
-            OTA_LOG_L1( "[%s] ERROR - Failed to close OTA update file.\r\n", OTA_METHOD_NAME );
-            eResult = ( kOTA_Err_FileClose | ( errno & kOTA_PAL_ErrMask ) ); /*lint !e40 !e737 !e9027 !e9029
-                                                                              * Errno is being used in accordance with host API documentation.
-                                                                              * Bitmasking is being used to preserve host API error with library status code. */
-        }
+        // TODO flush all writes and handling close update bd, resetting state, etc
 
         if( eResult == kOTA_Err_None )
         {
+            // Flag the image for mcuboot
+            // TODO maybe put this in ActivateNewImage?
+            aws::ota::flag_update_as_ready();
+
             OTA_LOG_L1( "[%s] %s signature verification passed.\r\n", OTA_METHOD_NAME, cOTA_JSON_FileSignatureKey );
         }
         else
@@ -177,30 +175,11 @@ int16_t prvPAL_WriteBlock(OTA_FileContext_t* const C, uint32_t ulOffset,
 
     if( prvContextValidate( C ) == true )
     {
-        lResult = fseek( (__sFILE*) C->pucFile, ulOffset, SEEK_SET ); /*lint !e586 !e713 !e9034
-                                                            * C standard library call is being used for portability. */
-
-        if( 0 == lResult )
-        {
-            lResult = fwrite( pcData, 1, ulBlockSize, (__sFILE*) C->pucFile ); /*lint !e586 !e713 !e9034
-                                                                      * C standard library call is being used for portability. */
-
-            if( lResult < 0 )
-            {
-                OTA_LOG_L1( "[%s] ERROR - fwrite failed\r\n", OTA_METHOD_NAME );
-                /* Mask to return a negative value. */
-                lResult = OTA_PAL_INT16_NEGATIVE_MASK | errno; /*lint !e40 !e9027
-                                                                * Errno is being used in accordance with host API documentation.
-                                                                * Bitmasking is being used to preserve host API error with library status code. */
-            }
-        }
-        else
-        {
-            OTA_LOG_L1( "[%s] ERROR - fseek failed\r\n", OTA_METHOD_NAME );
-            /* Mask to return a negative value. */
-            lResult = OTA_PAL_INT16_NEGATIVE_MASK | errno; /*lint !e40 !e9027
-                                                            * Errno is being used in accordance with host API documentation.
-                                                            * Bitmasking is being used to preserve host API error with library status code. */
+        // Cast to a block device pointer
+        mbed::BlockDevice* update_bd = (mbed::BlockDevice*)(C->lFileHandle);
+        lResult = update_bd->program(pcData, ulOffset, ulBlockSize);
+        if(lResult < 0) {
+            OTA_LOG_L1( "[%s] ERROR - flash program failed\r\n", OTA_METHOD_NAME );
         }
     }
     else /* Invalid context or file pointer provided. */
